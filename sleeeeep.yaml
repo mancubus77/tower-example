@@ -1,9 +1,9 @@
 ---
 - name: Hello World!
   hosts: localhost
- 
+  vars:
+   - connection: local
   tasks:
- 
   - name: SLEEEEPING
     pause:
       minutes: 5
