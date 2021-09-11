@@ -1,1 +1,9 @@
-
+---
+- name: Hello World!
+  hosts: localhost
+ 
+  tasks:
+ 
+  - name: SLEEEEPING
+    pause:
+      minutes: 5
