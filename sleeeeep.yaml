@@ -4,4 +4,4 @@
   tasks:
   - name: SLEEEEPING
     pause:
-      minutes: 2
+      minutes: 1
