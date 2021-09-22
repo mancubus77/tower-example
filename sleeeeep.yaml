@@ -4,4 +4,4 @@
   tasks:
   - name: SLEEEEPING
     pause:
-      minutes: 1
+      seconds: {{ sleep_value | default(30) }}
