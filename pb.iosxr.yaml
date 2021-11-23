@@ -1,4 +1,4 @@
-- name: test
+- name: CHANGE BANNER PLAYBOOK
   hosts: iosxr
   gather_facts: no
   connection: network_cli
@@ -6,7 +6,8 @@
     - bgptelecom.cisco_collection
 
   tasks:
-    - import_role:
+    - name: IMPORT ROLE FROM COLLECTION
+      import_role:
         #name: bgptelecom.cisco_collection.configure_banner
         # or
         name: configure_banner
