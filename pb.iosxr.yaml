@@ -2,10 +2,13 @@
   hosts: iosxr
   gather_facts: no
   connection: network_cli
-  #strategy: free
+  collections:
+    - bgptelecom.cisco_collection
 
   tasks:
-    - import_role: 
+    - import_role:
+        #name: bgptelecom.cisco_collection.configure_banner
+        # or
         name: configure_banner
       vars:
-        text: "This is Super router!"
+        text: "This is EVE-NG Router! Generated from GIT"
