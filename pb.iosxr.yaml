@@ -1,0 +1,11 @@
+- name: test
+  hosts: iosxr
+  gather_facts: no
+  connection: network_cli
+  #strategy: free
+
+  tasks:
+    - import_role: 
+        name: configure_banner
+      vars:
+        text: "This is Super router!"
