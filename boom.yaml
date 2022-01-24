@@ -1,0 +1,14 @@
+- name: Generate file
+  shell: 'cat /dev/urandom | head -c {{ size }}'
+  register: mem_rubbish
+
+# - name: Read file to var
+#   set_fact:
+#     _boo: "{{ lookup('file', '/tmp/large-file') }}"
+
+- name: Grow mem booom
+  set_fact:
+    boo: "{{ boo + mem_rubbish.stdout }}"
+
+- debug:
+    msg: "{{ boo | length }}"

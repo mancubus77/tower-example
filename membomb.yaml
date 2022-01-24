@@ -1,0 +1,13 @@
+---
+- name: MEMORY BOMB
+  hosts: localhost
+  vars:
+    boo: ""
+  tasks:
+
+  - name: GENERATE BOOM BLOCK
+    include_tasks: boom.yaml
+    with_sequence: start=1 end={{ repeats }}
+
+  - debug:
+      msg: "{{ boo | length }}"
