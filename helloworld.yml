@@ -4,5 +4,9 @@
   gather_facts: no
   tasks:
  
+  - name: Ansible version
+   debug:
+     msg: "Ansible version is  {{ ansible_version.full }}"
+      
   - name: Hello World!
     shell: echo "Hi! Tower is working."
