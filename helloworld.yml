@@ -5,7 +5,7 @@
   tasks:
  
   - name: Ansible version
-   debug:
+    debug:
      msg: "Ansible version is  {{ ansible_version.full }}"
       
   - name: Hello World!
