@@ -1,6 +1,6 @@
 ---
 - name: Hello World!
-  hosts: localhost
+  hosts: all
   gather_facts: no
   tasks:
   - name: SLEEEEPING
