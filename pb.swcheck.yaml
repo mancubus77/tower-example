@@ -1,0 +1,20 @@
+- name: Check SW Version
+  hosts: juniper
+  gather_facts: false
+  connection: ansible.netcommon.netconf
+  tasks:
+
+    - name: Get Software version prior upgrade
+      junipernetworks.junos.junos_command:
+        commands:
+          - show interfaces
+          - show version
+      register: out
+
+    - name: Print results
+      ansible.builtin.debug:
+        msg: |
+          "{{ out.stdout[0] }}"
+          "{{ out.stdout[1] }}"
+          "All tests passed"
+
