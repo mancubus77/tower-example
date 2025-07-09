@@ -1,0 +1,15 @@
+---
+- name: Check disk space on servers
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Get disk space information
+      ansible.builtin.command: df -h
+      register: disk_space_result
+      changed_when: false
+
+    - name: Display disk space information
+      ansible.builtin.debug:
+        msg: |
+          Disk space information for {{ inventory_hostname }}:
+          {{ disk_space_result.stdout }}
