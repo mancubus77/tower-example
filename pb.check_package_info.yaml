@@ -1,0 +1,71 @@
+
+---
+- name: Check Package Information via DNF
+  hosts: all
+  gather_facts: no
+  vars:
+    package_name: "{{ package_name | default('') }}"
+  
+  tasks:
+    - name: Validate package name parameter
+      fail:
+        msg: "Package name is required. Use -e package_name=<package_name>"
+      when: package_name == ""
+    
+    - name: Get package information using dnf info
+      shell: dnf info {{ package_name }}
+      register: package_info
+      ignore_errors: yes
+      changed_when: false
+      
+    - name: Display package information
+      debug:
+        msg: |
+          === Package Information ===
+          {{ package_info.stdout }}
+      when: package_info.rc == 0
+      
+    - name: Search for similar packages if not found
+      shell: dnf search {{ package_name }}
+      register: package_search
+      ignore_errors: yes
+      changed_when: false
+      when: package_info.rc != 0
+      
+    - name: Display search results when package not found
+      debug:
+        msg: |
+          === Package '{{ package_name }}' not found ===
+          
+          Searching for similar packages:
+          {{ package_search.stdout if package_search.stdout else 'No similar packages found' }}
+          
+          Original error:
+          {{ package_info.stderr }}
+      when: package_info.rc != 0
+      
+    # - name: Get additional info for installed packages
+    #   shell: dnf info installed {{ package_name }}
+    #   register: installed_info
+    #   ignore_errors: yes
+    #   changed_when: false
+    #   when: package_info.rc == 0
+      
+    # - name: Display installation status
+    #   debug:
+    #     msg: |
+    #       === Installation Status ===
+    #       {{ 'Package is INSTALLED' if installed_info.rc == 0 else 'Package is AVAILABLE but NOT INSTALLED' }}
+    #   when: package_info.rc == 0
+      
+    # - name: Summary
+    #   debug:
+    #     msg: |
+    #       === SUMMARY ===
+    #       Package: {{ package_name }}
+    #       Status: {{ 'Found' if package_info.rc == 0 else 'Not Found' }}
+    #       {% if package_info.rc == 0 %}
+    #       Installed: {{ 'Yes' if installed_info.rc == 0 else 'No' }}
+    #       {% else %}
+    #       Suggestion: Check the search results above for similar packages
+    #       {% endif %}
