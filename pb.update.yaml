@@ -1,0 +1,112 @@
+---
+- name: DNF Update Playbook
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    reboot_required_file: /var/run/reboot-required
+    auto_reboot: false
+    
+  tasks:
+    - name: Check if system is RHEL/CentOS/Fedora based
+      fail:
+        msg: "This playbook is designed for RHEL/CentOS/Fedora systems with dnf package manager"
+      when: ansible_facts['os_family'] != "RedHat" and ansible_facts['pkg_mgr'] != "dnf"
+    
+    - name: Check available disk space before update
+      shell: df -h /
+      register: disk_space_before
+      changed_when: false
+      
+    - name: Display disk space before update
+      debug:
+        msg: "Disk space before update: {{ disk_space_before.stdout_lines }}"
+    
+    - name: Check for available updates
+      dnf:
+        list: updates
+      register: available_updates
+      
+    - name: Display number of available updates
+      debug:
+        msg: "{{ available_updates.results | length }} updates available"
+      when: available_updates.results is defined
+    
+    - name: Update all packages using dnf
+      dnf:
+        name: "*"
+        state: latest
+        update_cache: yes
+        update_only: yes
+      register: dnf_update_result
+      notify: check_reboot_required
+      
+    - name: Display update results
+      debug:
+        msg: "DNF update completed. Changed: {{ dnf_update_result.changed }}"
+        
+    - name: Check available disk space after update
+      shell: df -h /
+      register: disk_space_after
+      changed_when: false
+      
+    - name: Display disk space after update
+      debug:
+        msg: "Disk space after update: {{ disk_space_after.stdout_lines }}"
+    
+    - name: Check if reboot is required
+      stat:
+        path: "{{ reboot_required_file }}"
+      register: reboot_required
+      
+    - name: Check for running kernel vs installed kernel
+      shell: |
+        RUNNING_KERNEL=$(uname -r)
+        INSTALLED_KERNEL=$(rpm -q kernel --last | head -1 | awk '{print $1}' | sed 's/kernel-//')
+        if [ "$RUNNING_KERNEL" != "$INSTALLED_KERNEL" ]; then
+          echo "reboot_needed"
+        else
+          echo "no_reboot_needed"
+        fi
+      register: kernel_check
+      changed_when: false
+      
+    - name: Display reboot status
+      debug:
+        msg: |
+          Reboot required file exists: {{ reboot_required.stat.exists }}
+          Kernel reboot needed: {{ kernel_check.stdout == 'reboot_needed' }}
+          
+    - name: Reboot system if required and auto_reboot is enabled
+      reboot:
+        msg: "Reboot initiated by Ansible for dnf updates"
+        connect_timeout: 5
+        reboot_timeout: 600
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: uptime
+      when: 
+        - auto_reboot | bool
+        - (reboot_required.stat.exists or kernel_check.stdout == 'reboot_needed')
+      register: reboot_result
+      
+    - name: Display reboot completion message
+      debug:
+        msg: "System rebooted successfully"
+      when: reboot_result is defined and reboot_result.rebooted
+      
+    - name: Notify if reboot is needed but not performed
+      debug:
+        msg: "NOTICE: System reboot is recommended but auto_reboot is disabled. Please reboot manually."
+      when: 
+        - not (auto_reboot | bool)
+        - (reboot_required.stat.exists or kernel_check.stdout == 'reboot_needed')
+    
+  handlers:
+    - name: check_reboot_required
+      shell: |
+        if needs-restarting -r &>/dev/null; then
+          touch {{ reboot_required_file }}
+        fi
+      ignore_errors: yes

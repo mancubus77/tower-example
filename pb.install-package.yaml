@@ -1,0 +1,81 @@
+---
+- name: Install RPM Package
+  hosts: all
+  become: yes
+  gather_facts: yes
+  
+  vars:
+    package_name: "{{ package_name | default('') }}"
+    
+  tasks:
+    - name: Validate package name parameter
+      fail:
+        msg: "Package name is required. Use -e package_name=<package_name>"
+      when: package_name == ""
+    
+    - name: Check if system is RHEL/CentOS/Fedora based
+      fail:
+        msg: "This playbook is designed for RHEL/CentOS/Fedora systems with dnf package manager"
+      when: ansible_facts['os_family'] != "RedHat" and ansible_facts['pkg_mgr'] != "dnf"
+    
+    - name: Check if package is already installed
+      shell: dnf list installed {{ package_name }}
+      register: package_installed_check
+      ignore_errors: yes
+      changed_when: false
+      
+    - name: Display package already installed message
+      debug:
+        msg: "Package '{{ package_name }}' is already installed"
+      when: package_installed_check.rc == 0
+      
+    - name: Check if package is available for installation
+      shell: dnf info {{ package_name }}
+      register: package_available_check
+      ignore_errors: yes
+      changed_when: false
+      when: package_installed_check.rc != 0
+      
+    - name: Fail if package is not available
+      fail:
+        msg: |
+          Package '{{ package_name }}' is not available for installation.
+          Please check the package name or repository configuration.
+      when: 
+        - package_installed_check.rc != 0
+        - package_available_check.rc != 0
+        
+    - name: Install the RPM package
+      dnf:
+        name: "{{ package_name }}"
+        state: present
+        update_cache: yes
+      register: package_install_result
+      when: package_installed_check.rc != 0
+      
+    - name: Display installation success message
+      debug:
+        msg: "Package '{{ package_name }}' has been successfully installed"
+      when: 
+        - package_install_result is defined
+        - package_install_result.changed
+        
+    - name: Verify package installation
+      shell: dnf list installed {{ package_name }}
+      register: package_verify
+      ignore_errors: yes
+      changed_when: false
+      when: package_install_result is defined
+      
+    - name: Display installation verification
+      debug:
+        msg: |
+          === Installation Summary ===
+          Package: {{ package_name }}
+          Status: {{ 'Successfully Installed' if package_verify.rc == 0 else 'Installation Failed' }}
+          {% if package_install_result is defined and package_install_result.changed %}
+          Action: Package was installed during this run
+          {% elif package_installed_check.rc == 0 %}
+          Action: Package was already installed
+          {% endif %}
+      when: package_install_result is defined or package_installed_check.rc == 0
