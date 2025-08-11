@@ -15,6 +15,9 @@
     vm_user: "{{ vm_user_in | default('admin') }}"
     vm_password: "{{ vm_password_in | default('password123') }}"
     vm_running: "{{ vm_running_in | default(true) }}"
+    # Kubernetes connection variables
+    k8s_api_key: "{{ k8s_api_key_in | default('') }}"
+    k8s_host: "{{ k8s_host_in | default('') }}"
     
   tasks:
     - name: Validate required variables
@@ -33,6 +36,9 @@
         api_version: v1
         kind: Namespace
         name: "{{ vm_namespace }}"
+        api_key: "{{ k8s_api_key }}"
+        host: "{{ k8s_host }}"
+        validate_certs: false
       register: namespace_check
       
     - name: Create namespace if it doesn't exist
@@ -41,12 +47,18 @@
         api_version: v1
         kind: Namespace
         state: present
+        api_key: "{{ k8s_api_key }}"
+        host: "{{ k8s_host }}"
+        validate_certs: false
       when: namespace_check.resources | length == 0
       
     - name: Create PersistentVolumeClaim for VM storage
       kubernetes.core.k8s:
         definition: "{{ pvc_definition }}"
         state: present
+        api_key: "{{ k8s_api_key }}"
+        host: "{{ k8s_host }}"
+        validate_certs: false
       register: pvc_result
       vars:
         pvc_base:
@@ -60,7 +72,7 @@
               - ReadWriteOnce
             resources:
               requests:
-                storage: "{{ vm_disk_size }}"
+                storage: "{{ vm_disk_size }}Gi"
         pvc_with_storage_class: "{{ pvc_base | combine({'spec': pvc_base.spec | combine({'storageClassName': storage_class})}) }}"
         pvc_definition: "{{ pvc_with_storage_class if storage_class != '' else pvc_base }}"
       
@@ -68,6 +80,9 @@
       kubernetes.core.k8s:
         definition: "{{ lookup('template', 'templates/kubevirt-vm.yaml.j2') | from_yaml }}"
         state: present
+        api_key: "{{ k8s_api_key }}"
+        host: "{{ k8s_host }}"
+        validate_certs: false
       register: vm_result
       
     - name: Wait for VM to be ready (if running)
@@ -81,6 +96,9 @@
           type: Ready
           status: "True"
         wait_timeout: 600
+        api_key: "{{ k8s_api_key }}"
+        host: "{{ k8s_host }}"
+        validate_certs: false
       when: vm_running | bool
       
     - name: Display VM deployment summary
@@ -103,6 +121,9 @@
         kind: VirtualMachineInstance
         name: "{{ vm_name }}"
         namespace: "{{ vm_namespace }}"
+        api_key: "{{ k8s_api_key }}"
+        host: "{{ k8s_host }}"
+        validate_certs: false
       register: vmi_info
       when: vm_running | bool
       
