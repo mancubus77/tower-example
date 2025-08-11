@@ -1,0 +1,119 @@
+---
+- name: Deploy KubeVirt Virtual Machine with Persistent Storage
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  
+  vars:
+    # Canonical internal variables (left side) map from unique input variables (right side)
+    vm_name: "{{ vm_name_in | default('noname') }}"
+    vm_namespace: "{{ vm_namespace_in | default('aap25') }}"
+    vm_vcpu: "{{ vm_vcpu_in | default(4) | int }}"
+    vm_memory: "{{ vm_memory_in | default('8Gi') }}"
+    vm_disk_size: "{{ vm_disk_size_in | default('20Gi') }}"
+    storage_class: "{{ storage_class_in | default('') }}"
+    vm_user: "{{ vm_user_in | default('admin') }}"
+    vm_password: "{{ vm_password_in | default('password123') }}"
+    vm_running: "{{ vm_running_in | default(true) }}"
+    
+  tasks:
+    - name: Validate required variables
+      fail:
+        msg: "{{ item }} is required but not provided"
+      when: vars[item] is undefined or vars[item] == "" or vars[item] == "noname"
+      loop:
+        - vm_name
+        - vm_namespace
+        - vm_vcpu
+        - vm_memory
+        - vm_disk_size
+    
+    - name: Check if namespace exists
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Namespace
+        name: "{{ vm_namespace }}"
+      register: namespace_check
+      
+    - name: Create namespace if it doesn't exist
+      kubernetes.core.k8s:
+        name: "{{ vm_namespace }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+      when: namespace_check.resources | length == 0
+      
+    - name: Create PersistentVolumeClaim for VM storage
+      kubernetes.core.k8s:
+        definition: "{{ pvc_definition }}"
+        state: present
+      register: pvc_result
+      vars:
+        pvc_base:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: "{{ vm_name }}-pvc"
+            namespace: "{{ vm_namespace }}"
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: "{{ vm_disk_size }}"
+        pvc_with_storage_class: "{{ pvc_base | combine({'spec': pvc_base.spec | combine({'storageClassName': storage_class})}) }}"
+        pvc_definition: "{{ pvc_with_storage_class if storage_class != '' else pvc_base }}"
+      
+    - name: Deploy KubeVirt Virtual Machine
+      kubernetes.core.k8s:
+        definition: "{{ lookup('template', 'templates/kubevirt-vm.yaml.j2') | from_yaml }}"
+        state: present
+      register: vm_result
+      
+    - name: Wait for VM to be ready (if running)
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ vm_name }}"
+        namespace: "{{ vm_namespace }}"
+        wait: true
+        wait_condition:
+          type: Ready
+          status: "True"
+        wait_timeout: 600
+      when: vm_running | bool
+      
+    - name: Display VM deployment summary
+      debug:
+        msg: |
+          === Virtual Machine Deployment Summary ===
+          VM Name: {{ vm_name }}
+          Namespace: {{ vm_namespace }}
+          vCPU Cores: {{ vm_vcpu }}
+          Memory: {{ vm_memory }}
+          Disk Size: {{ vm_disk_size }}
+          Storage Class: {{ storage_class }}
+          Running: {{ vm_running }}
+          PVC Created: {{ vm_name }}-pvc
+          Status: {{ 'Successfully Deployed' if vm_result.changed else 'Already Exists' }}
+          
+    - name: Get VM instance information (if running)
+      kubernetes.core.k8s_info:
+        api_version: kubevirt.io/v1
+        kind: VirtualMachineInstance
+        name: "{{ vm_name }}"
+        namespace: "{{ vm_namespace }}"
+      register: vmi_info
+      when: vm_running | bool
+      
+    - name: Display VM network information
+      debug:
+        msg: |
+          === VM Network Information ===
+          VM Instance: {{ vm_name }}
+          IP Address: {{ vmi_info.resources[0].status.interfaces[0].ipAddress | default('Not yet assigned') }}
+          Pod IP: {{ vmi_info.resources[0].status.interfaces[0].ipAddresses | default(['Not yet assigned']) | join(', ') }}
+      when: 
+        - vm_running | bool
+        - vmi_info.resources | length > 0
+        - vmi_info.resources[0].status.interfaces is defined 

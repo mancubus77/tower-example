@@ -1,0 +1,19 @@
+---
+# Ansible Collections Requirements for KubeVirt VM Deployment
+
+collections:
+  # Kubernetes collection for managing K8s resources
+  - name: kubernetes.core
+    version: ">=2.4.0"
+    
+  # Community general collection for additional utilities
+  - name: community.general
+    version: ">=5.0.0"
+    
+  # Community Kubernetes collection for advanced K8s operations
+  - name: community.kubernetes
+    version: ">=2.0.0"
+    
+  # Ansible POSIX collection for file operations
+  - name: ansible.posix
+    version: ">=1.4.0" 

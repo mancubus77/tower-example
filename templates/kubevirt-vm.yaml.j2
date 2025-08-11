@@ -1,0 +1,52 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: "{{ vm_name }}"
+  namespace: "{{ vm_namespace }}"
+spec:
+  running: true
+  template:
+    metadata:
+      creationTimestamp: null
+    spec:
+      architecture: amd64
+      domain:
+        cpu:
+          cores: {{ vm_vcpu | int }}
+          sockets: 1
+          threads: 1
+        memory:
+          guest: "{{ vm_memory }}"
+        devices:
+          disks:
+            - disk:
+                bus: virtio
+              name: containerdisk
+            - disk:
+                bus: virtio
+              name: cloudinitdisk
+            - disk:
+                bus: virtio
+              name: pvc-disk
+          interfaces:
+            - masquerade: {}
+              model: virtio
+              name: default
+        machine:
+          type: pc-q35-rhel9.2.0
+      networks:
+        - name: default
+          pod: {}
+      volumes:
+        - containerDisk:
+            image: 'quay.io/kubevirt/fedora-with-test-tooling-container-disk:devel'
+          name: containerdisk
+        - name: pvc-disk
+          persistentVolumeClaim:
+            claimName: "{{ vm_name }}-pvc"
+        - cloudInitNoCloud:
+            userData: |-
+              #cloud-config
+              password: fedora
+              chpasswd: { expire: False }
+          name: cloudinitdisk 
