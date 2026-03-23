@@ -4,7 +4,7 @@
 # It simulates the remediation of missing QUIC class-map on a Cisco IOS-XE router.
 
 - name: "Set QoS Policy — Add QUIC Traffic Classification"
-  hosts: "{{ target_host | default('edge-router-01') }}"
+  hosts: localhost
   connection: local
   gather_facts: false
 
