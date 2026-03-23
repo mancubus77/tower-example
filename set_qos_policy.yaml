@@ -1,0 +1,239 @@
+---
+# Ansible Playbook: Set QoS Policy for QUIC Traffic Classification
+# This is a MOCKUP playbook for demo purposes — does not connect to real devices.
+# It simulates the remediation of missing QUIC class-map on a Cisco IOS-XE router.
+
+- name: "Set QoS Policy — Add QUIC Traffic Classification"
+  hosts: "{{ target_host | default('edge-router-01') }}"
+  connection: local
+  gather_facts: false
+
+  vars:
+    target_interface: "{{ target_interface | default('GigabitEthernet0/1') }}"
+    acl_name: "{{ acl_name | default('ACL_QOS_EMERGINGTUBE_QUIC') }}"
+    acl_protocol: "{{ acl_protocol | default('udp') }}"
+    acl_port: "{{ acl_port | default(443) }}"
+    class_map_name: "{{ class_map_name | default('APP_EMERGINGTUBE_QUIC') }}"
+    policy_map_name: "{{ policy_map_name | default('POLICY_CUSTOMER_MAIN') }}"
+    police_cir: "{{ police_cir | default('20000000000') }}"
+    police_action_conform: "{{ police_action_conform | default('transmit') }}"
+    police_action_exceed: "{{ police_action_exceed | default('drop') }}"
+
+  tasks:
+
+    # ── Phase 1: Pre-Change Verification ──────────────────────────────────────
+
+    - name: "Phase 1 — Pre-Change Verification"
+      ansible.builtin.debug:
+        msg: "═══════════════════════════════════════════════════════════"
+
+    - name: "Display target device and parameters"
+      ansible.builtin.debug:
+        msg:
+          - "Target Host      : {{ inventory_hostname }}"
+          - "Target Interface : {{ target_interface }}"
+          - "ACL Name         : {{ acl_name }}"
+          - "ACL Rule         : permit {{ acl_protocol }} any any eq {{ acl_port }}"
+          - "Class-Map Name   : {{ class_map_name }}"
+          - "Policy-Map Name  : {{ policy_map_name }}"
+          - "Policer CIR      : {{ police_cir }} bps ({{ (police_cir | int / 1000000000) | int }} Gbps)"
+          - "Conform Action   : {{ police_action_conform }}"
+          - "Exceed Action    : {{ police_action_exceed }}"
+
+    - name: "[MOCK] Verify device reachability"
+      ansible.builtin.debug:
+        msg: "✓ Device {{ inventory_hostname }} is reachable (mock: SSH connectivity OK)"
+
+    - name: "[MOCK] Check current interface status"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Interface {{ target_interface }} status: up/up"
+          - "  Input rate  : 18.2 Gbps"
+          - "  Output rate : 19.8 Gbps"
+          - "  Errors      : 0"
+
+    - name: "[MOCK] Check current QoS policy on interface"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Current service-policy on {{ target_interface }}: {{ policy_map_name }} (output)"
+          - "  Classes configured:"
+          - "    - APP_VOIP              : priority percent 10"
+          - "    - APP_EMERGINGTUBE_TCP  : police cir 20Gbps"
+          - "    - class-default         : shape average 20Gbps + POLICER_UNCLASSIFIED_TRAFFIC"
+          - ""
+          - "  ⚠ WARNING: No class for QUIC traffic detected!"
+          - "  ⚠ class-default shows 1,523,100 policer drops — unclassified traffic is being throttled"
+
+    - name: "[MOCK] Verify ACL does not already exist"
+      ansible.builtin.debug:
+        msg: "✓ ACL '{{ acl_name }}' does not exist on {{ inventory_hostname }} — safe to create"
+
+    # ── Phase 2: Backup ───────────────────────────────────────────────────────
+
+    - name: "Phase 2 — Configuration Backup"
+      ansible.builtin.debug:
+        msg: "═══════════════════════════════════════════════════════════"
+
+    - name: "[MOCK] Backup running configuration"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Running config backed up to: flash:{{ inventory_hostname }}_config_{{ ansible_date_time.date | default('2025-08-09') }}.bak"
+          - "  Config size: 1,847 bytes"
+          - "  Checksum   : sha256:a3f8c2d1e..."
+      register: backup_result
+
+    - name: "Record backup location"
+      ansible.builtin.set_fact:
+        backup_file: "flash:{{ inventory_hostname }}_config_{{ ansible_date_time.date | default('2025-08-09') }}.bak"
+
+    # ── Phase 3: Apply Configuration Changes ──────────────────────────────────
+
+    - name: "Phase 3 — Applying Configuration Changes"
+      ansible.builtin.debug:
+        msg: "═══════════════════════════════════════════════════════════"
+
+    - name: "[MOCK] Step 3.1 — Create ACL for QUIC traffic"
+      ansible.builtin.debug:
+        msg:
+          - "Sending configuration commands:"
+          - "  {{ inventory_hostname }}# configure terminal"
+          - "  {{ inventory_hostname }}(config)# ip access-list extended {{ acl_name }}"
+          - "  {{ inventory_hostname }}(config-ext-nacl)#  permit {{ acl_protocol }} any any eq {{ acl_port }}"
+          - "  {{ inventory_hostname }}(config-ext-nacl)# exit"
+          - ""
+          - "✓ ACL '{{ acl_name }}' created successfully"
+
+    - name: "[MOCK] Step 3.2 — Create class-map for QUIC traffic"
+      ansible.builtin.debug:
+        msg:
+          - "Sending configuration commands:"
+          - "  {{ inventory_hostname }}(config)# class-map match-any {{ class_map_name }}"
+          - "  {{ inventory_hostname }}(config-cmap)#  match access-group name {{ acl_name }}"
+          - "  {{ inventory_hostname }}(config-cmap)# exit"
+          - ""
+          - "✓ Class-map '{{ class_map_name }}' created successfully"
+
+    - name: "[MOCK] Step 3.3 — Add QUIC class to policy-map with policer"
+      ansible.builtin.debug:
+        msg:
+          - "Sending configuration commands:"
+          - "  {{ inventory_hostname }}(config)# policy-map {{ policy_map_name }}"
+          - "  {{ inventory_hostname }}(config-pmap)#  class {{ class_map_name }}"
+          - "  {{ inventory_hostname }}(config-pmap-c)#   police cir {{ police_cir }} conform-action {{ police_action_conform }} exceed-action {{ police_action_exceed }}"
+          - "  {{ inventory_hostname }}(config-pmap-c)# exit"
+          - "  {{ inventory_hostname }}(config-pmap)# exit"
+          - ""
+          - "✓ Class '{{ class_map_name }}' added to policy-map '{{ policy_map_name }}'"
+          - "  Policer: CIR {{ (police_cir | int / 1000000000) | int }} Gbps, conform={{ police_action_conform }}, exceed={{ police_action_exceed }}"
+
+    - name: "[MOCK] Step 3.4 — Save running configuration"
+      ansible.builtin.debug:
+        msg:
+          - "  {{ inventory_hostname }}(config)# end"
+          - "  {{ inventory_hostname }}# write memory"
+          - "  [OK]"
+          - ""
+          - "✓ Configuration saved to startup-config"
+
+    # ── Phase 4: Post-Change Verification ─────────────────────────────────────
+
+    - name: "Phase 4 — Post-Change Verification"
+      ansible.builtin.debug:
+        msg: "═══════════════════════════════════════════════════════════"
+
+    - name: "[MOCK] Verify ACL is configured"
+      ansible.builtin.debug:
+        msg:
+          - "  {{ inventory_hostname }}# show ip access-lists {{ acl_name }}"
+          - "  Extended IP access list {{ acl_name }}"
+          - "      10 permit {{ acl_protocol }} any any eq {{ acl_port }}"
+          - ""
+          - "✓ ACL '{{ acl_name }}' verified"
+
+    - name: "[MOCK] Verify class-map is configured"
+      ansible.builtin.debug:
+        msg:
+          - "  {{ inventory_hostname }}# show class-map {{ class_map_name }}"
+          - "   Class Map match-any {{ class_map_name }} (id 4)"
+          - "     Match access-group name {{ acl_name }}"
+          - ""
+          - "✓ Class-map '{{ class_map_name }}' verified"
+
+    - name: "[MOCK] Verify updated policy-map on interface"
+      ansible.builtin.debug:
+        msg:
+          - "  {{ inventory_hostname }}# show policy-map interface {{ target_interface }}"
+          - ""
+          - "  {{ target_interface }}"
+          - "    Service-policy output: {{ policy_map_name }}"
+          - ""
+          - "      Class-map: APP_VOIP (match-any)"
+          - "        0 packets, 0 bytes"
+          - "        priority percent 10"
+          - ""
+          - "      Class-map: APP_EMERGINGTUBE_TCP (match-any)"
+          - "        980000 packets"
+          - "        police: cir 20000000000 bps"
+          - "          conform: 980000 packets, transmit"
+          - "          exceed:  0 packets, drop"
+          - ""
+          - "      Class-map: {{ class_map_name }} (match-any)          ← NEW"
+          - "        0 packets (counter reset after policy update)"
+          - "        police: cir {{ police_cir }} bps"
+          - "          conform: 0 packets, {{ police_action_conform }}"
+          - "          exceed:  0 packets, {{ police_action_exceed }}"
+          - ""
+          - "      Class-map: class-default (match-any)"
+          - "        50000000 packets"
+          - "        shape average 20000000000 bps"
+          - "        service-policy: POLICER_UNCLASSIFIED_TRAFFIC"
+          - "          police: cir 1000000000 bps"
+          - "            conform: 50000000 packets, transmit"
+          - "            exceed:  0 packets, drop                       ← DROPS CLEARED"
+          - ""
+          - "✓ QUIC traffic is now classified under '{{ class_map_name }}'"
+          - "✓ Policer drops on class-default should stop for QUIC traffic"
+
+    - name: "[MOCK] Verify interface health after change"
+      ansible.builtin.debug:
+        msg:
+          - "✓ Interface {{ target_interface }} status: up/up (no flap detected)"
+          - "  Input rate  : 18.5 Gbps"
+          - "  Output rate : 19.9 Gbps"
+          - "  Errors      : 0"
+
+    # ── Phase 5: Summary ──────────────────────────────────────────────────────
+
+    - name: "Phase 5 — Change Summary"
+      ansible.builtin.debug:
+        msg: "═══════════════════════════════════════════════════════════"
+
+    - name: "Display remediation summary"
+      ansible.builtin.debug:
+        msg:
+          - "╔═══════════════════════════════════════════════════════════╗"
+          - "║           QoS POLICY CHANGE — COMPLETED                  ║"
+          - "╠═══════════════════════════════════════════════════════════╣"
+          - "║ Device        : {{ inventory_hostname }}"
+          - "║ Interface     : {{ target_interface }}"
+          - "║ Backup        : {{ backup_file | default('N/A') }}"
+          - "║                                                          ║"
+          - "║ Changes Applied:                                         ║"
+          - "║  1. Created ACL     : {{ acl_name }}"
+          - "║     Rule            : permit {{ acl_protocol }} any any eq {{ acl_port }}"
+          - "║  2. Created Class   : {{ class_map_name }}"
+          - "║     Match           : access-group {{ acl_name }}"
+          - "║  3. Updated Policy  : {{ policy_map_name }}"
+          - "║     Policer         : CIR {{ (police_cir | int / 1000000000) | int }} Gbps"
+          - "║     Conform/Exceed  : {{ police_action_conform }}/{{ police_action_exceed }}"
+          - "║                                                          ║"
+          - "║ Result: EmergingTube QUIC traffic (UDP/{{ acl_port }}) is   ║"
+          - "║ now properly classified and no longer hits the           ║"
+          - "║ unclassified traffic policer.                            ║"
+          - "╚═══════════════════════════════════════════════════════════╝"
+
+    - name: "Rollback instructions (if needed)"
+      ansible.builtin.debug:
+        msg:
+          - "ROLLBACK: If issues occur, restore the pre-change configuration:"
+          - "  {{ inventory_hostname }}# configure replace {{ backup_file | default('flash:backup.bak') }} force"
