@@ -9,15 +9,15 @@
   gather_facts: false
 
   vars:
-    target_interface: "{{ target_interface | default('GigabitEthernet0/1') }}"
-    acl_name: "{{ acl_name | default('ACL_QOS_EMERGINGTUBE_QUIC') }}"
-    acl_protocol: "{{ acl_protocol | default('udp') }}"
-    acl_port: "{{ acl_port | default(443) }}"
-    class_map_name: "{{ class_map_name | default('APP_EMERGINGTUBE_QUIC') }}"
-    policy_map_name: "{{ policy_map_name | default('POLICY_CUSTOMER_MAIN') }}"
-    police_cir: "{{ police_cir | default('20000000000') }}"
-    police_action_conform: "{{ police_action_conform | default('transmit') }}"
-    police_action_exceed: "{{ police_action_exceed | default('drop') }}"
+    target_interface: "GigabitEthernet0/1"
+    acl_name: "ACL_QOS_EMERGINGTUBE_QUIC"
+    acl_protocol: "udp"
+    acl_port: 443
+    class_map_name: "APP_EMERGINGTUBE_QUIC"
+    policy_map_name: "POLICY_CUSTOMER_MAIN"
+    police_cir: "20000000000"
+    police_action_conform: "transmit"
+    police_action_exceed: "drop"
 
   tasks:
 
