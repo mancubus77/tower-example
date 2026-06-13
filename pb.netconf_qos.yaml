@@ -1,0 +1,132 @@
+# =============================================================================
+# Playbook: get_qos_config.yml
+# Purpose:  Retrieve the full QoS running configuration from Nokia SR Linux
+#           devices via NETCONF and display a formatted summary.
+#
+# What it does:
+#   1. Fetches the running QoS configuration (queues, forwarding classes,
+#      DSCP classifiers, scheduler policies, interface bindings).
+#   2. Saves full output as YAML per host.
+#   3. Displays a formatted summary showing queues, forwarding classes,
+#      DSCP-to-FC mappings, scheduler policies, and interface bindings.
+#
+# Extra parameters: None required (runs against inventory hosts).
+#
+# Output files:
+#   ./qos_config_<hostname>.yml  — QoS config per device
+#
+# Usage:
+#   # All SR Linux devices
+#   uv run ansible-playbook -i inventory/qos-hosts.yml playbooks/get_qos_config.yml
+#
+#   # Single device
+#   uv run ansible-playbook -i inventory/qos-hosts.yml playbooks/get_qos_config.yml -l spine1
+#
+# Connection:
+#   Uses ansible.netcommon.netconf over SSH port 830 (tunneled via localhost).
+#   Credentials and ports are defined in inventory/qos-hosts.yml.
+#
+# YANG namespace: urn:nokia.com:srlinux:qos:qos
+# =============================================================================
+---
+- name: Get QoS configuration via NETCONF
+  hosts: all
+  gather_facts: false
+  serial: 1
+
+  tasks:
+    - name: Debug proxy setup
+      ansible.builtin.debug:
+        msg: |
+          proxy_command: {{ ansible_paramiko_proxy_command | default('NOT SET') }}
+
+    - name: Check key file
+      ansible.builtin.command: find /tmp /runner -name "jumpbox_key" -o -name "*.pem" -o -name "ssh_key*"
+      delegate_to: localhost
+      run_once: true
+      ignore_errors: true
+
+    - name: Check key file
+      ansible.builtin.command: ls -la /tmp/jumpbox_key
+      delegate_to: localhost
+      run_once: true
+
+    - name: Get QoS config
+      ansible.netcommon.netconf_get:
+        source: running
+        filter: |
+          <qos xmlns="urn:nokia.com:srlinux:qos:qos">
+          </qos>
+        display: json
+      register: qos_config
+
+    - name: Save full QoS config to YAML file
+      ansible.builtin.copy:
+        content: "{{ qos_config.output | to_nice_yaml }}"
+        dest: "./qos_config_{{ inventory_hostname }}.yml"
+      delegate_to: localhost
+
+    - name: Display QoS Configuration Summary
+      ansible.builtin.debug:
+        msg: |
+
+          ╔════════════════════════════════════════════════════════════════╗
+          ║  Device: {{ inventory_hostname | upper }}
+          ╚════════════════════════════════════════════════════════════════╝
+
+          {% set qos = qos_config.output.data.qos | default({}) %}
+          {% if qos and qos.queues is defined %}
+          QUEUES
+          ---
+          {% for queue in qos.queues.queue | default([]) %}
+            {{ queue.name }}: Queue Index {{ queue['queue-index'] }}
+          {% endfor %}
+
+          FORWARDING CLASSES
+          ---
+          {% for fc in qos['forwarding-classes']['forwarding-class'] | default([]) %}
+            {{ fc.name }}: unicast={{ fc.output['unicast-queue'] }}, multicast={{ fc.output['multicast-queue'] }}
+          {% endfor %}
+
+          DSCP CLASSIFIERS
+          ---
+          {% if qos.classifiers is defined and qos.classifiers['dscp-policy'] is defined %}
+          {% set policy = qos.classifiers['dscp-policy'] %}
+            Policy: {{ policy.name }}
+          {% for dscp in policy.dscp | default([]) %}
+              DSCP {{ '%2d' | format(dscp.value | int) }} -> FC: {{ dscp['forwarding-class'] }} ({{ dscp['drop-probability'] }})
+          {% endfor %}
+          {% else %}
+            No DSCP classifiers configured
+          {% endif %}
+
+          SCHEDULER POLICIES
+          ---
+          {% if qos['scheduler-policies'] is defined %}
+          {% set policy = qos['scheduler-policies']['scheduler-policy'] %}
+            {{ policy.name }}
+          {% endif %}
+
+          QOS INTERFACES
+          ---
+          {% if qos.interfaces is defined and qos.interfaces.interface is defined %}
+          {% set iface_data = qos.interfaces.interface %}
+          {% if iface_data is mapping %}
+            {{ iface_data['interface-id'] }} ({{ iface_data['interface-ref'].interface }}.{{ iface_data['interface-ref'].subinterface }})
+              Input Classifier: {{ iface_data.input.classifiers['dscp-policy'] | default('none') }}
+              Output Scheduler: {{ iface_data.output.scheduler['scheduler-policy'] | default('none') }}
+          {% else %}
+          {% for iface in iface_data %}
+            {{ iface['interface-id'] }} ({{ iface['interface-ref'].interface }}.{{ iface['interface-ref'].subinterface }})
+              Input Classifier: {{ iface.input.classifiers['dscp-policy'] | default('none') }}
+              Output Scheduler: {{ iface.output.scheduler['scheduler-policy'] | default('none') }}
+          {% endfor %}
+          {% endif %}
+          {% else %}
+            No QoS interfaces configured
+          {% endif %}
+          {% else %}
+          No QoS configuration found on this device
+          {% endif %}
+
+          Full config saved to: qos_config_{{ inventory_hostname }}.yml
