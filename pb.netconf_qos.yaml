@@ -50,6 +50,7 @@
       ansible.builtin.command: ls -la /tmp/jumpbox_key
       delegate_to: localhost
       run_once: true
+      ignore_errors: true
 
     - name: Get QoS config
       ansible.netcommon.netconf_get:
