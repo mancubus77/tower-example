@@ -6,14 +6,14 @@
 # What it does:
 #   1. Fetches the running QoS configuration (queues, forwarding classes,
 #      DSCP classifiers, scheduler policies, interface bindings).
-#   2. Saves full output as YAML per host.
+#   2. Saves full output as JSON per host.
 #   3. Displays a formatted summary showing queues, forwarding classes,
 #      DSCP-to-FC mappings, scheduler policies, and interface bindings.
 #
 # Extra parameters: None required (runs against inventory hosts).
 #
 # Output files:
-#   ./qos_config_<hostname>.yml  — QoS config per device
+#   ./qos_config_<hostname>.json  — QoS config per device
 #
 # Usage:
 #   # All SR Linux devices
@@ -23,8 +23,8 @@
 #   uv run ansible-playbook -i inventory/qos-hosts.yml playbooks/get_qos_config.yml -l spine1
 #
 # Connection:
-#   Uses ansible.netcommon.netconf over SSH port 830 (tunneled via localhost).
-#   Credentials and ports are defined in inventory/qos-hosts.yml.
+#   Uses ansible.netcommon.netconf over SSH port 830.
+#   Credentials and ports are defined in inventory.
 #
 # YANG namespace: urn:nokia.com:srlinux:qos:qos
 # =============================================================================
@@ -35,23 +35,6 @@
   serial: 1
 
   tasks:
-    - name: Debug proxy setup
-      ansible.builtin.debug:
-        msg: |
-          proxy_command: {{ ansible_paramiko_proxy_command | default('NOT SET') }}
-
-    - name: Check key file
-      ansible.builtin.command: find /tmp /runner -name "jumpbox_key" -o -name "*.pem" -o -name "ssh_key*"
-      delegate_to: localhost
-      run_once: true
-      ignore_errors: true
-
-    - name: Check key file
-      ansible.builtin.command: ls -la /tmp/jumpbox_key
-      delegate_to: localhost
-      run_once: true
-      ignore_errors: true
-
     - name: Get QoS config
       ansible.netcommon.netconf_get:
         source: running
@@ -61,10 +44,10 @@
         display: json
       register: qos_config
 
-    - name: Save full QoS config to YAML file
+    - name: Save full QoS config to JSON file
       ansible.builtin.copy:
-        content: "{{ qos_config.output | to_nice_yaml }}"
-        dest: "./qos_config_{{ inventory_hostname }}.yml"
+        content: "{{ qos_config.output | to_nice_json }}"
+        dest: "./qos_config_{{ inventory_hostname }}.json"
       delegate_to: localhost
 
     - name: Display QoS Configuration Summary
@@ -130,4 +113,4 @@
           No QoS configuration found on this device
           {% endif %}
 
-          Full config saved to: qos_config_{{ inventory_hostname }}.yml
+          Full config saved to: qos_config_{{ inventory_hostname }}.json
