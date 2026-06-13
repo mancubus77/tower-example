@@ -1,0 +1,25 @@
+- name: Test credential injector
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  tasks:
+    - name: Show injected proxy command
+      ansible.builtin.debug:
+        msg: "{{ ansible_paramiko_proxy_command | default('NOT INJECTED') }}"
+
+    - name: Find any injected files
+      ansible.builtin.shell: find /tmp /runner/env -type f 2>/dev/null | sort
+      register: files
+
+    - name: Show files
+      ansible.builtin.debug:
+        var: files.stdout_lines
+
+    - name: Show extravars content
+      ansible.builtin.shell: cat /runner/env/extravars 2>/dev/null; echo "==="; ls -la /runner/env/tmp* 2>/dev/null
+      register: extravars
+
+    - name: Show extravars
+      ansible.builtin.debug:
+        var: extravars.stdout
